@@ -38,6 +38,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"@sveltejs/adapter-node": "^5.2.0",
 		"dompurify": "^3.1.6",
 		"marked": "^13.0.2"
 	}

@@ -39,29 +39,25 @@ interface Embed {
 }
 
 interface NewEmbedSelectOption {
-	id: string;
-	name: string;
-	emoji?: string;
-	description?: string;
+	Id: number;
+	Name: string;
+	Description: string;
+	Emoji?: string;
 }
 
 interface NewEmbedComponent {
-	displayName: string;
-	id: number;
-	style: number;
-	url?: string;
-	emoji?: string;
-	isSelect: boolean;
-	maxOptions?: number;
-	minOptions?: number;
-	options?: NewEmbedSelectOption[];
+	Id: number;
+	DisplayName: string;
+	IsSelect: boolean;
+	MaxOptions?: number;
+	MinOptions?: number;
+	Options: NewEmbedSelectOption[];
 }
 
 interface NewEmbed {
 	content?: string;
 	embed?: Embed;
-	embeds?: Embed[];
-	components?: NewEmbedComponent[][];
+	components?: NewEmbedComponent[];
 }
 
 type EmbedStore = Writable<NewEmbed> & {
@@ -70,11 +66,11 @@ type EmbedStore = Writable<NewEmbed> & {
 	updateField: (index: number, field: keyof Field, value: any) => void;
 	removeField: (index: number) => void;
 	addComponent: (isSelect: boolean) => void;
-	removeComponent: (rowIndex: number, componentIndex: number) => void;
-	updateComponent: (rowIndex: number, componentIndex: number, field: keyof NewEmbedComponent, value: any) => void;
-	addSelectOption: (rowIndex: number, componentIndex: number) => void;
-	updateSelectOption: (rowIndex: number, componentIndex: number, optionIndex: number, field: keyof NewEmbedSelectOption, value: any) => void;
-	removeSelectOption: (rowIndex: number, componentIndex: number, optionIndex: number) => void;
+	removeComponent: (index: number) => void;
+	updateComponent: (index: number, field: keyof NewEmbedComponent, value: any) => void;
+	addSelectOption: (componentIndex: number) => void;
+	updateSelectOption: (componentIndex: number, optionIndex: number, field: keyof NewEmbedSelectOption, value: any) => void;
+	removeSelectOption: (componentIndex: number, optionIndex: number) => void;
 	reset: () => void;
 };
 
@@ -84,20 +80,31 @@ const defaultEmbed: NewEmbed = {
 		title: '',
 		description: '',
 		color: '#000000',
-		author: { name: '', icon_url: '', url: '' },
-		footer: { text: '' },
-		thumbnail: { url: '' },
-		image: { url: '' },
+		author: {
+			name: '',
+			url: '',
+			icon_url: ''
+		},
+		thumbnail: {
+			url: ''
+		},
+		image: {
+			url: ''
+		},
+		footer: {
+			text: '',
+			icon_url: ''
+		},
 		fields: []
 	},
 	components: []
 };
 
-function getNextAvailableId(components?: NewEmbedComponent[][]): number {
+function getNextAvailableId(components?: NewEmbedComponent[]): number {
 	if (!components || components.length === 0) {
 		return 1;
 	}
-	const maxId = Math.max(...components.flat().map(c => c.id));
+	const maxId = Math.max(...components.map(c => c.Id));
 	return maxId + 1;
 }
 
@@ -131,71 +138,65 @@ export const createEmbed = (): EmbedStore => {
 		addComponent: (isSelect: boolean) => update(embed => {
 			const newComponent: NewEmbedComponent = isSelect
 				? {
-					displayName: 'New Select Menu',
-					id: getNextAvailableId(embed.components),
-					style: 1,
-					isSelect: true,
-					maxOptions: 1,
-					minOptions: 1,
-					options: []
+					Id: getNextAvailableId(embed.components),
+					DisplayName: "Default",
+					IsSelect: true,
+					MaxOptions: 1,
+					MinOptions: 1,
+					Options: [
+						{ Id: 1, Name: "Option 1", Description: "Description 1" }
+					]
 				}
 				: {
-					displayName: 'New Button',
-					id: getNextAvailableId(embed.components),
-					style: 1,
-					isSelect: false
+					Id: getNextAvailableId(embed.components),
+					DisplayName: "Default",
+					IsSelect: false,
+					Options: [
+						{ Id: 1, Name: "Button 1", Description: "Description 1" }
+					]
 				};
 
+			return {
+				...embed,
+				components: [...(embed.components || []), newComponent]
+			};
+		}),
+		removeComponent: (index: number) => update(embed => ({
+			...embed,
+			components: (embed.components || []).filter((_, i) => i !== index)
+		})),
+		updateComponent: (index: number, field: keyof NewEmbedComponent, value: any) => update(embed => {
 			const newComponents = [...(embed.components || [])];
-			if (isSelect || newComponents.length === 0 || newComponents[newComponents.length - 1].length === 5) {
-				newComponents.push([newComponent]);
-			} else {
-				newComponents[newComponents.length - 1].push(newComponent);
-			}
-
+			newComponents[index] = { ...newComponents[index], [field]: value };
 			return { ...embed, components: newComponents };
 		}),
-		removeComponent: (rowIndex: number, componentIndex: number) => update(embed => {
+		addSelectOption: (componentIndex: number) => update(embed => {
 			const newComponents = [...(embed.components || [])];
-			newComponents[rowIndex] = newComponents[rowIndex].filter((_, i) => i !== componentIndex);
-			if (newComponents[rowIndex].length === 0) {
-				newComponents.splice(rowIndex, 1);
-			}
+			const component = newComponents[componentIndex];
+			const newOptionId = component.Options.length + 1;
+			component.Options = [
+				...component.Options,
+				{
+					Id: newOptionId,
+					Name: `Option ${newOptionId}`,
+					Description: `Description ${newOptionId}`
+				}
+			];
 			return { ...embed, components: newComponents };
 		}),
-		updateComponent: (rowIndex: number, componentIndex: number, field: keyof NewEmbedComponent, value: any) => update(embed => {
+		updateSelectOption: (componentIndex: number, optionIndex: number, field: keyof NewEmbedSelectOption, value: any) => update(embed => {
 			const newComponents = [...(embed.components || [])];
-			newComponents[rowIndex][componentIndex] = { ...newComponents[rowIndex][componentIndex], [field]: value };
-			return { ...embed, components: newComponents };
-		}),
-		addSelectOption: (rowIndex: number, componentIndex: number) => update(embed => {
-			const newComponents = [...(embed.components || [])];
-			const component = newComponents[rowIndex][componentIndex];
-			if (component.isSelect) {
-				component.options = [
-					...(component.options || []),
-					{
-						id: (component.options?.length || 0).toString(),
-						name: 'New Option',
-						description: 'Option description'
-					}
-				];
-			}
-			return { ...embed, components: newComponents };
-		}),
-		updateSelectOption: (rowIndex: number, componentIndex: number, optionIndex: number, field: keyof NewEmbedSelectOption, value: any) => update(embed => {
-			const newComponents = [...(embed.components || [])];
-			const component = newComponents[rowIndex][componentIndex];
-			if (component.isSelect && component.options) {
-				component.options[optionIndex] = { ...component.options[optionIndex], [field]: value };
+			const component = newComponents[componentIndex];
+			if (component.Options) {
+				component.Options[optionIndex] = { ...component.Options[optionIndex], [field]: value };
 			}
 			return { ...embed, components: newComponents };
 		}),
-		removeSelectOption: (rowIndex: number, componentIndex: number, optionIndex: number) => update(embed => {
+		removeSelectOption: (componentIndex: number, optionIndex: number) => update(embed => {
 			const newComponents = [...(embed.components || [])];
-			const component = newComponents[rowIndex][componentIndex];
-			if (component.isSelect && component.options) {
-				component.options = component.options.filter((_, i) => i !== optionIndex);
+			const component = newComponents[componentIndex];
+			if (component.Options) {
+				component.Options = component.Options.filter((_, i) => i !== optionIndex);
 			}
 			return { ...embed, components: newComponents };
 		}),

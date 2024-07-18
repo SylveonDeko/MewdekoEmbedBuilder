@@ -3,6 +3,8 @@
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
 
+	let activeSelectMenu: number | null = null;
+
 	function getButtonStyle(style: number) {
 		switch (style) {
 			case 1: return 'bg-[#5865F2] hover:bg-[#4752C4]'; // Primary
@@ -16,11 +18,19 @@
 	function parseMarkdown(text: string): string {
 		return DOMPurify.sanitize(marked(text));
 	}
+
+	function toggleSelectMenu(componentIndex: number) {
+		if (activeSelectMenu === componentIndex) {
+			activeSelectMenu = null;
+		} else {
+			activeSelectMenu = componentIndex;
+		}
+	}
 </script>
 
 <div class="text-white font-sans text-[16px]">
 	{#if $embed.content}
-		<div class="content mb-2">{$embed.content}</div>
+		<div class="content mb-2">{@html parseMarkdown($embed.content)}</div>
 	{/if}
 
 	{#if $embed.embed}
@@ -98,42 +108,43 @@
 
 	{#if $embed.components && $embed.components.length > 0}
 		<div class="components">
-			{#each $embed.components as row, rowIndex}
+			{#each $embed.components as component, componentIndex}
 				<div class="flex flex-wrap gap-2 mb-2">
-					{#each row as component, componentIndex}
-						{#if !component.isSelect}
-							<button
-								class={`px-4 py-2 rounded text-white text-sm font-medium ${getButtonStyle(component.style)}`}
-								disabled={component.style === 2}
+					{#if !component.IsSelect}
+						<button
+							class={`px-4 py-2 rounded text-white text-sm font-medium ${getButtonStyle(component.style)}`}
+							disabled={component.style === 2}
+						>
+							{#if component.emoji}
+								<span class="mr-2">{component.emoji}</span>
+							{/if}
+							{component.Options[0]?.Name || 'Button'}
+						</button>
+					{:else}
+						<div class="select-menu w-full relative">
+							<div
+								class="select-trigger border border-transparent cursor-pointer box-border grid grid-cols-[1fr_auto] items-center bg-[#2D3136] text-[#DCDDDE] rounded px-3 py-2"
+								on:click={() => toggleSelectMenu(componentIndex)}
 							>
-								{#if component.emoji}
-									<span class="mr-2">{component.emoji}</span>
-								{/if}
-								{component.displayName || 'Button'}
-							</button>
-						{:else}
-							<div class="select-menu w-full relative">
-								<div class="select-trigger border border-transparent cursor-pointer box-border grid grid-cols-[1fr_auto] items-center bg-[#2D3136] text-[#DCDDDE] rounded">
-									<span class="px-3 py-2">{component.displayName || 'Select an option'}</span>
-									<svg class="h-4 w-4 fill-current mr-2" viewBox="0 0 24 24">
-										<path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6-1.41-1.41z"/>
-									</svg>
-								</div>
-								<div class="select-options hidden absolute left-0 right-0 mt-1 bg-[#2D3136] rounded shadow-lg z-10">
-									{#each component.options || [] as option}
-										<div class="select-option cursor-pointer text-[#DCDDDE] grid grid-cols-[1fr_auto] items-center font-medium box-border hover:bg-[#36393f]">
-                      <span class="px-3 py-2">
-                        {#if option.emoji}
-                          <span class="mr-2">{option.emoji}</span>
-                        {/if}
-												{option.name}
-                      </span>
+								<span>{component.DisplayName || 'Select an option'}</span>
+								<svg class="h-4 w-4 fill-current" viewBox="0 0 24 24">
+									<path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6-1.41-1.41z"/>
+								</svg>
+							</div>
+							{#if activeSelectMenu === componentIndex}
+								<div class="select-options absolute left-0 right-0 mt-1 bg-[#2D3136] rounded shadow-lg z-10">
+									{#each component.Options as option}
+										<div class="select-option cursor-pointer text-[#DCDDDE] grid grid-cols-[1fr_auto] items-center font-medium box-border hover:bg-[#36393f] px-3 py-2">
+											{#if option.Emoji}
+												<span class="mr-2">{option.Emoji}</span>
+											{/if}
+											{option.Name}
 										</div>
 									{/each}
 								</div>
-							</div>
-						{/if}
-					{/each}
+							{/if}
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -142,7 +153,7 @@
 
 <style>
     .embed {
-        background-color: #2f3136;
+        background-color: var(--primary-630);
         border-radius: 4px;
         padding: 8px 16px 16px 12px;
         position: relative;
@@ -172,10 +183,6 @@
         overflow-y: auto;
     }
 
-    .select-menu:hover .select-options {
-        display: block;
-    }
-
     .select-trigger {
         transition: border 0.2s ease;
     }
@@ -184,105 +191,107 @@
         border-color: #040405;
     }
 
-    :global(.embed h1) {
+    :global(.embed h1, .content h1) {
         font-size: 2em;
         font-weight: bold;
         margin-top: 0.67em;
         margin-bottom: 0.67em;
     }
 
-    :global(.embed h2) {
+    :global(.embed h2, .content h2) {
         font-size: 1.5em;
         font-weight: bold;
         margin-top: 0.83em;
         margin-bottom: 0.83em;
     }
 
-    :global(.embed h3) {
+    :global(.embed h3, .content h3) {
         font-size: 1.17em;
         font-weight: bold;
         margin-top: 1em;
         margin-bottom: 1em;
     }
 
-    :global(.embed h4) {
+    :global(.embed h4, .content h4) {
         font-size: 1em;
         font-weight: bold;
         margin-top: 1.33em;
         margin-bottom: 1.33em;
     }
 
-    :global(.embed h5) {
+    :global(.embed h5, .content h5) {
         font-size: 0.83em;
+
+
         font-weight: bold;
         margin-top: 1.67em;
         margin-bottom: 1.67em;
     }
 
-    :global(.embed h6) {
+    :global(.embed h6, .content h6) {
         font-size: 0.67em;
         font-weight: bold;
         margin-top: 2.33em;
         margin-bottom: 2.33em;
     }
 
-    :global(.embed strong) {
+    :global(.embed strong, .content strong) {
         font-weight: bold;
     }
 
-    :global(.embed em) {
+    :global(.embed em, .content em) {
         font-style: italic;
     }
 
-    :global(.embed u) {
+    :global(.embed u, .content u) {
         text-decoration: underline;
     }
 
-    :global(.embed s) {
+    :global(.embed s, .content s) {
         text-decoration: line-through;
     }
 
-    :global(.embed ul) {
+    :global(.embed ul, .content ul) {
         list-style-type: disc;
         padding-left: 1.5em;
     }
 
-    :global(.embed ol) {
+    :global(.embed ol, .content ol) {
         list-style-type: decimal;
         padding-left: 1.5em;
     }
 
-    :global(.embed blockquote) {
+    :global(.embed blockquote, .content blockquote) {
         border-left: 4px solid #4f545c;
         margin: 0;
         padding-left: 1em;
     }
 
-    :global(.embed code) {
+    :global(.embed code, .content code) {
         background-color: #2f3136;
         border-radius: 3px;
         padding: 0.2em 0.4em;
         font-family: monospace;
     }
 
-    :global(.embed pre) {
+    :global(.embed pre, .content pre) {
         background-color: #2f3136;
         border-radius: 3px;
         padding: 0.5em;
         overflow-x: auto;
     }
 
-    :global(.embed pre code) {
+    :global(.embed pre code, .content pre code) {
         background-color: transparent;
         padding: 0;
     }
 
-    :global(.embed a) {
+    :global(.embed a, .content a) {
         color: #00b0f4;
         text-decoration: none;
     }
 
-    :global(.embed a:hover) {
+    :global(.embed a:hover, .content a:hover) {
         text-decoration: underline;
     }
 </style>
