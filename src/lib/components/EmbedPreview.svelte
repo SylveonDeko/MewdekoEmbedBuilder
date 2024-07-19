@@ -2,8 +2,47 @@
 	import { embed } from '$lib/embedStore';
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
+	import { writable } from 'svelte/store';
 
-	let activeSelectMenu: number | null = null;
+	const openSelectMenu = writable<number | null>(null);
+
+	function parseMarkdown(text: string): string {
+		let parsedText = marked(text);
+		parsedText = parseEmojis(parsedText);
+		parsedText = parseMentions(parsedText);
+		return DOMPurify.sanitize(parsedText);
+	}
+
+	function parseEmojis(text: string): string {
+		// Parse custom emojis
+		const customEmojiPattern = /<:(.*?):(\\d+)>/g;
+		text = text.replace(customEmojiPattern, (match, name, id) =>
+			`<img class="inline-emoji" src="https://cdn.discordapp.com/emojis/${id}.png" alt="${name}" title="${name}">`
+		);
+
+		// Parse Unicode emojis (this is a basic implementation, you might want to use a library for more comprehensive parsing)
+		const unicodeEmojiPattern = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
+		text = text.replace(unicodeEmojiPattern, (match) =>
+			`<span class="emoji">${match}</span>`
+		);
+
+		return text;
+	}
+
+	function parseMentions(text: string): string {
+		const userMentionPattern = /<@!?(\d+)>/g;
+		const channelMentionPattern = /<#(\d+)>/g;
+		const roleMentionPattern = /<@&(\d+)>/g;
+
+		// Replace user mentions
+		text = text.replace(userMentionPattern, '<span class="mention user-mention">@User</span>');
+		// Replace channel mentions
+		text = text.replace(channelMentionPattern, '<span class="mention channel-mention">#channel</span>');
+		// Replace role mentions
+		text = text.replace(roleMentionPattern, '<span class="mention role-mention">@Role</span>');
+
+		return text;
+	}
 
 	function getButtonStyle(style: number) {
 		switch (style) {
@@ -15,137 +54,117 @@
 		}
 	}
 
-	function parseMarkdown(text: string): string {
-		return DOMPurify.sanitize(marked(text));
-	}
-
-	function toggleSelectMenu(componentIndex: number) {
-		if (activeSelectMenu === componentIndex) {
-			activeSelectMenu = null;
-		} else {
-			activeSelectMenu = componentIndex;
-		}
+	function toggleSelectMenu(index: number) {
+		openSelectMenu.update(current => current === index ? null : index);
 	}
 </script>
 
 <div class="text-white font-sans text-[16px]">
-	{#if $embed.content}
-		<div class="content mb-2">{@html parseMarkdown($embed.content)}</div>
-	{/if}
-
-	{#if $embed.embed}
-		<div class="embed mb-4" style="border-left-color: {$embed.embed.color}; border-left-width: 4px;">
-			{#if $embed.embed.author}
+	{#each $embed.Embeds as embedItem, embedIndex}
+		<div class="embed mb-4" style="border-left-color: {embedItem.color}; border-left-width: 4px;">
+			{#if embedItem.author}
 				<div class="author mb-2 flex items-center">
-					{#if $embed.embed.author.icon_url}
-						<img src={$embed.embed.author.icon_url} alt="Author Icon" class="w-6 h-6 rounded-full mr-2">
+					{#if embedItem.author.icon_url}
+						<img src={embedItem.author.icon_url} alt="Author Icon" class="w-6 h-6 rounded-full mr-2">
 					{/if}
-					{#if $embed.embed.author.url}
-						<a href={$embed.embed.author.url} class="text-white hover:underline">{$embed.embed.author.name}</a>
+					{#if embedItem.author.url}
+						<a href={embedItem.author.url} class="text-white hover:underline">{embedItem.author.name}</a>
 					{:else}
-						<span>{$embed.embed.author.name}</span>
+						<span>{embedItem.author.name}</span>
 					{/if}
 				</div>
 			{/if}
 
-			{#if $embed.embed.title}
+			{#if embedItem.title}
 				<div class="title font-bold text-base mb-2">
-					{#if $embed.embed.url}
-						<a href={$embed.embed.url} class="text-[#00b0f4] hover:underline">{$embed.embed.title}</a>
+					{#if embedItem.url}
+						<a href={embedItem.url} class="text-[#00b0f4] hover:underline">{embedItem.title}</a>
 					{:else}
-						{$embed.embed.title}
+						{embedItem.title}
 					{/if}
 				</div>
 			{/if}
 
-			{#if $embed.embed.description}
+			{#if embedItem.description}
 				<div class="description text-[0.875rem] leading-[1.125rem] whitespace-pre-wrap mb-4">
-					{@html parseMarkdown($embed.embed.description)}
+					{@html parseMarkdown(embedItem.description)}
 				</div>
 			{/if}
 
-			{#if $embed.embed.fields && $embed.embed.fields.length > 0}
+			{#if embedItem.fields && embedItem.fields.length > 0}
 				<div class="fields grid gap-2" style="grid-template-columns: repeat(auto-fit, minmax(0, 1fr));">
-					{#each $embed.embed.fields as field}
+					{#each embedItem.fields as field}
 						<div class={`field ${field.inline ? 'inline' : 'col-span-full'}`}>
-							<div class="field-name font-bold text-[0.875rem]">{field.name}</div>
-							<div class="field-value text-[0.875rem]">
-								{@html parseMarkdown(field.value)}
-							</div>
+							<div class="field-name font-bold text-[0.875rem]">{@html parseMarkdown(field.name)}</div>
+							<div class="field-value text-[0.875rem]">{@html parseMarkdown(field.value)}</div>
 						</div>
 					{/each}
 				</div>
 			{/if}
 
-			{#if $embed.embed.image && $embed.embed.image.url}
+			{#if embedItem.image && embedItem.image.url}
 				<div class="image mt-4">
-					<img src={$embed.embed.image.url} alt="Embed Image" class="max-w-full rounded">
+					<img src={embedItem.image.url} alt="Embed Image" class="max-w-full rounded">
 				</div>
 			{/if}
 
-			{#if $embed.embed.thumbnail && $embed.embed.thumbnail.url}
+			{#if embedItem.thumbnail && embedItem.thumbnail.url}
 				<div class="thumbnail absolute top-0 right-0 mt-4 mr-4">
-					<img src={$embed.embed.thumbnail.url} alt="Thumbnail" class="w-20 h-20 rounded">
+					<img src={embedItem.thumbnail.url} alt="Thumbnail" class="w-20 h-20 rounded">
 				</div>
 			{/if}
 
-			{#if $embed.embed.footer || $embed.embed.timestamp}
+			{#if embedItem.footer || embedItem.timestamp}
 				<div class="footer mt-2 flex items-center text-[0.75rem] text-[#72767d]">
-					{#if $embed.embed.footer && $embed.embed.footer.icon_url}
-						<img src={$embed.embed.footer.icon_url} alt="Footer Icon" class="w-5 h-5 rounded-full mr-2">
+					{#if embedItem.footer && embedItem.footer.icon_url}
+						<img src={embedItem.footer.icon_url} alt="Footer Icon" class="w-5 h-5 rounded-full mr-2">
 					{/if}
-					{#if $embed.embed.footer && $embed.embed.footer.text}
-						<span>{$embed.embed.footer.text}</span>
+					{#if embedItem.footer && embedItem.footer.text}
+						<span>{@html parseMarkdown(embedItem.footer.text)}</span>
 					{/if}
-					{#if $embed.embed.timestamp}
+					{#if embedItem.timestamp}
 						<span class="mx-1">•</span>
-						<span>{new Date($embed.embed.timestamp).toLocaleString()}</span>
+						<span>{new Date(embedItem.timestamp).toLocaleString()}</span>
 					{/if}
 				</div>
 			{/if}
 		</div>
-	{/if}
+	{/each}
 
 	{#if $embed.components && $embed.components.length > 0}
-		<div class="components">
+		<div class="components grid grid-cols-5 gap-2">
 			{#each $embed.components as component, componentIndex}
-				<div class="flex flex-wrap gap-2 mb-2">
-					{#if !component.IsSelect}
-						<button
-							class={`px-4 py-2 rounded text-white text-sm font-medium ${getButtonStyle(component.style)}`}
-							disabled={component.style === 2}
+				{#if component.IsSelect}
+					<div class="select-menu col-span-5 relative mb-2">
+						<div
+							class="select-trigger border border-transparent cursor-pointer box-border grid grid-cols-[1fr_auto] items-center bg-[#2D3136] text-[#DCDDDE] rounded px-3 py-2"
+							on:click={() => toggleSelectMenu(componentIndex)}
 						>
-							{#if component.emoji}
-								<span class="mr-2">{component.emoji}</span>
-							{/if}
-							{component.Options[0]?.Name || 'Button'}
-						</button>
-					{:else}
-						<div class="select-menu w-full relative">
-							<div
-								class="select-trigger border border-transparent cursor-pointer box-border grid grid-cols-[1fr_auto] items-center bg-[#2D3136] text-[#DCDDDE] rounded px-3 py-2"
-								on:click={() => toggleSelectMenu(componentIndex)}
-							>
-								<span>{component.DisplayName || 'Select an option'}</span>
-								<svg class="h-4 w-4 fill-current" viewBox="0 0 24 24">
-									<path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6-1.41-1.41z"/>
-								</svg>
-							</div>
-							{#if activeSelectMenu === componentIndex}
-								<div class="select-options absolute left-0 right-0 mt-1 bg-[#2D3136] rounded shadow-lg z-10">
-									{#each component.Options as option}
-										<div class="select-option cursor-pointer text-[#DCDDDE] grid grid-cols-[1fr_auto] items-center font-medium box-border hover:bg-[#36393f] px-3 py-2">
-											{#if option.Emoji}
-												<span class="mr-2">{option.Emoji}</span>
-											{/if}
-											{option.Name}
-										</div>
-									{/each}
-								</div>
-							{/if}
+							<span>{component.DisplayName || 'Select an option'}</span>
+							<svg class="h-4 w-4 fill-current" viewBox="0 0 24 24">
+								<path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6-1.41-1.41z" />
+							</svg>
 						</div>
-					{/if}
-				</div>
+						{#if $openSelectMenu === componentIndex}
+							<div class="select-options absolute top-full left-0 w-full bg-[#2D3136] mt-1 rounded shadow-lg z-10">
+								{#each component.Options as option}
+									<div class="option px-3 py-2 hover:bg-[#3C4047] cursor-pointer">
+										{@html parseEmojis(option.Emoji || '')}
+										<span class="option-name font-bold">{option.Name}</span>
+										<span class="option-description block text-sm text-[#72767d]">{option.Description}</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<button
+						class={`px-4 py-2 rounded text-white text-sm font-medium ${getButtonStyle(component.style)}`}
+						disabled={component.style === 2}
+					>
+						{@html parseEmojis(component.DisplayName || 'Button')}
+					</button>
+				{/if}
 			{/each}
 		</div>
 	{/if}
@@ -153,7 +172,7 @@
 
 <style>
     .embed {
-        background-color: var(--primary-630);
+        background-color: #303030;
         border-radius: 4px;
         padding: 8px 16px 16px 12px;
         position: relative;
@@ -191,6 +210,35 @@
         border-color: #040405;
     }
 
+    .inline-emoji {
+        display: inline-block;
+        width: 1.375em;
+        height: 1.375em;
+        vertical-align: bottom;
+    }
+
+    .emoji {
+        display: inline-block;
+        font-size: 1.375em;
+        line-height: 1;
+    }
+
+    .mention {
+        background-color: rgba(88, 101, 242, 0.3);
+        color: #dee0fc;
+        border-radius: 3px;
+        padding: 0 2px;
+        font-weight: 500;
+    }
+
+    .user-mention, .role-mention {
+        color: #dee0fc;
+    }
+
+    .channel-mention {
+        color: #7289da;
+    }
+
     :global(.embed h1, .content h1) {
         font-size: 2em;
         font-weight: bold;
@@ -221,8 +269,6 @@
 
     :global(.embed h5, .content h5) {
         font-size: 0.83em;
-
-
         font-weight: bold;
         margin-top: 1.67em;
         margin-bottom: 1.67em;

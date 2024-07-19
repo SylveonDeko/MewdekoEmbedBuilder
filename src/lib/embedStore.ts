@@ -1,4 +1,4 @@
-import { writable, type Writable } from 'svelte/store';
+import { type Writable, writable } from 'svelte/store';
 
 interface Author {
 	name?: string;
@@ -47,56 +47,46 @@ interface NewEmbedSelectOption {
 
 interface NewEmbedComponent {
 	Id: number;
-	DisplayName: string;
 	IsSelect: boolean;
+	style?: number;
+	DisplayName?: string;
 	MaxOptions?: number;
 	MinOptions?: number;
 	Options: NewEmbedSelectOption[];
 }
 
-interface NewEmbed {
-	content?: string;
-	embed?: Embed;
+interface EmbedMessage {
+	Embeds: Embed[];
 	components?: NewEmbedComponent[];
 }
 
-type EmbedStore = Writable<NewEmbed> & {
-	setField: (field: keyof NewEmbed, value: any) => void;
-	addField: () => void;
-	updateField: (index: number, field: keyof Field, value: any) => void;
-	removeField: (index: number) => void;
-	addComponent: (isSelect: boolean) => void;
+type EmbedStore = Writable<EmbedMessage> & {
+	addEmbed: () => void;
+	removeEmbed: (index: number) => void;
+	updateEmbed: (index: number, field: keyof Embed, value: any) => void;
+	updateEmbedField: (embedIndex: number, fieldIndex: number, field: keyof Field, value: any) => void;
+	addEmbedField: (embedIndex: number) => void;
+	removeEmbedField: (embedIndex: number, fieldIndex: number) => void;
+	addComponent: (newComponent: NewEmbedComponent) => void;
 	removeComponent: (index: number) => void;
 	updateComponent: (index: number, field: keyof NewEmbedComponent, value: any) => void;
+	updateFromJson: (json: string) => void;
 	addSelectOption: (componentIndex: number) => void;
 	updateSelectOption: (componentIndex: number, optionIndex: number, field: keyof NewEmbedSelectOption, value: any) => void;
 	removeSelectOption: (componentIndex: number, optionIndex: number) => void;
-	reset: () => void;
 };
 
-const defaultEmbed: NewEmbed = {
-	content: '',
-	embed: {
+const defaultEmbedMessage: EmbedMessage = {
+	Embeds: [{
 		title: '',
 		description: '',
 		color: '#000000',
-		author: {
-			name: '',
-			url: '',
-			icon_url: ''
-		},
-		thumbnail: {
-			url: ''
-		},
-		image: {
-			url: ''
-		},
-		footer: {
-			text: '',
-			icon_url: ''
-		},
+		author: { name: '', icon_url: '', url: '' },
+		footer: { text: '' },
+		thumbnail: { url: '' },
+		image: { url: '' },
 		fields: []
-	},
+	}],
 	components: []
 };
 
@@ -109,58 +99,60 @@ function getNextAvailableId(components?: NewEmbedComponent[]): number {
 }
 
 export const createEmbed = (): EmbedStore => {
-	const { subscribe, set, update } = writable<NewEmbed>(defaultEmbed);
+	const { subscribe, set, update } = writable<EmbedMessage>(defaultEmbedMessage);
 
 	return {
 		subscribe,
 		set,
 		update,
-		setField: (field: keyof NewEmbed, value: any) => update(embed => ({ ...embed, [field]: value })),
-		addField: () => update(embed => ({
-			...embed,
-			embed: {
-				...embed.embed,
-				fields: [...(embed.embed?.fields || []), { name: '', value: '', inline: false }]
-			}
-		})),
-		updateField: (index: number, field: keyof Field, value: any) => update(embed => {
-			const newFields = [...(embed.embed?.fields || [])];
-			newFields[index] = { ...newFields[index], [field]: value };
-			return { ...embed, embed: { ...embed.embed, fields: newFields } };
-		}),
-		removeField: (index: number) => update(embed => ({
-			...embed,
-			embed: {
-				...embed.embed,
-				fields: (embed.embed?.fields || []).filter((_, i) => i !== index)
-			}
-		})),
-		addComponent: (isSelect: boolean) => update(embed => {
-			const newComponent: NewEmbedComponent = isSelect
-				? {
-					Id: getNextAvailableId(embed.components),
-					DisplayName: "Default",
-					IsSelect: true,
-					MaxOptions: 1,
-					MinOptions: 1,
-					Options: [
-						{ Id: 1, Name: "Option 1", Description: "Description 1" }
-					]
-				}
-				: {
-					Id: getNextAvailableId(embed.components),
-					DisplayName: "Default",
-					IsSelect: false,
-					Options: [
-						{ Id: 1, Name: "Button 1", Description: "Description 1" }
-					]
+		addEmbed: () => update(message => {
+			if (message.Embeds.length < 10) {
+				return {
+					...message,
+					Embeds: [...message.Embeds, {
+						title: '',
+						description: '',
+						color: '#000000',
+						author: { name: '', icon_url: '', url: '' },
+						footer: { text: '' },
+						thumbnail: { url: '' },
+						image: { url: '' },
+						fields: []
+					}]
 				};
-
-			return {
-				...embed,
-				components: [...(embed.components || []), newComponent]
-			};
+			}
+			return message;
 		}),
+		removeEmbed: (index: number) => update(message => ({
+			...message,
+			Embeds: message.Embeds.filter((_, i) => i !== index)
+		})),
+		updateEmbed: (index: number, field: keyof Embed, value: any) => update(message => {
+			const newEmbeds = [...message.Embeds];
+			newEmbeds[index] = { ...newEmbeds[index], [field]: value };
+			return { ...message, Embeds: newEmbeds };
+		}),
+		updateEmbedField: (embedIndex: number, fieldIndex: number, field: keyof Field, value: any) => update(message => {
+			const newEmbeds = [...message.Embeds];
+			const newFields = [...newEmbeds[embedIndex].fields || []];
+			newFields[fieldIndex] = { ...newFields[fieldIndex], [field]: value };
+			newEmbeds[embedIndex] = { ...newEmbeds[embedIndex], fields: newFields };
+			return { ...message, Embeds: newEmbeds };
+		}),
+		addEmbedField: (embedIndex: number) => update(message => {
+			const newEmbeds = [...message.Embeds];
+			newEmbeds[embedIndex].fields = [...(newEmbeds[embedIndex].fields || []), { name: '', value: '', inline: false }];
+			return { ...message, Embeds: newEmbeds };
+		}),
+		removeEmbedField: (embedIndex: number, fieldIndex: number) => update(message => {
+			const newEmbeds = [...message.Embeds];
+			newEmbeds[embedIndex].fields = newEmbeds[embedIndex].fields.filter((_, i) => i !== fieldIndex);
+			return { ...message, Embeds: newEmbeds };
+		}),
+		addComponent: (newComponent: NewEmbedComponent) => update(embed => ({
+			...embed,
+			components: [...(embed.components || []), newComponent]
+		})),
 		removeComponent: (index: number) => update(embed => ({
 			...embed,
 			components: (embed.components || []).filter((_, i) => i !== index)
@@ -200,7 +192,14 @@ export const createEmbed = (): EmbedStore => {
 			}
 			return { ...embed, components: newComponents };
 		}),
-		reset: () => set(defaultEmbed)
+		updateFromJson: (json: string) => {
+			try {
+				const parsedJson = JSON.parse(json);
+				set(parsedJson);
+			} catch (error) {
+				console.error('Invalid JSON:', error);
+			}
+		}
 	};
 };
 
