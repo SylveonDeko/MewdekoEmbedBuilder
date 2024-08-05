@@ -1,6 +1,36 @@
 <script lang="ts">
 	import { embed } from '$lib/embedStore';
 	import { writable } from 'svelte/store';
+	import type { DiscordUser } from "$lib/types/discord";
+	import { chatTriggers } from "$lib/stores/chatTriggersStore";
+	import { userAdminGuilds } from '$lib/stores/adminGuildsStore';
+	import type { ChatTriggers } from '$lib/types/chatTriggers';
+
+	export let user: DiscordUser | undefined;
+
+	let selectedGuild: string | null = null;
+	let guildTriggers: ChatTriggers[] = [];
+
+	async function fetchChatTriggers() {
+		if (selectedGuild) {
+			try {
+				const response = await fetch(`/api/chat-triggers?guildId=${selectedGuild}`);
+				if (response.ok) {
+					const data = await response.json();
+					chatTriggers.set(data);
+					guildTriggers = data;
+				} else {
+					console.error('Failed to fetch chat triggers');
+				}
+			} catch (error) {
+				console.error('Error fetching chat triggers:', error);
+			}
+		}
+	}
+
+	$: if (selectedGuild) {
+		fetchChatTriggers();
+	}
 
 	function addEmbed() {
 		embed.addEmbed();
@@ -28,7 +58,7 @@
 
 	function addComponent(isSelect: boolean) {
 		const newComponent = {
-			Id: getNextAvailableId($embed.components),
+			Id: '',
 			IsSelect: isSelect,
 			style: isSelect ? undefined : 1,
 			DisplayName: isSelect ? 'Select Menu' : 'Button',
@@ -46,7 +76,7 @@
 	}
 
 	function addComponentOption(componentIndex: number) {
-		embed.addSelectOption(componentIndex);
+		embed.addSelectOption(componentIndex, { Id: '', Name: '', Description: '', Emoji: '' });
 	}
 
 	function updateComponentOption(componentIndex: number, optionIndex: number, field: string, value: any) {
@@ -55,14 +85,6 @@
 
 	function removeComponentOption(componentIndex: number, optionIndex: number) {
 		embed.removeSelectOption(componentIndex, optionIndex);
-	}
-
-	function getNextAvailableId(components?: any[]): number {
-		if (!components || components.length === 0) {
-			return 1;
-		}
-		const maxId = Math.max(...components.map(c => c.Id));
-		return maxId + 1;
 	}
 
 	$: canAddMoreEmbeds = $embed.Embeds.length < 10;
@@ -95,6 +117,19 @@
 <div class="text-[#dcddde]">
 	<h2 class="text-2xl font-bold mb-4">Embed Editor</h2>
 
+	<div class="mb-4">
+		<label for="guild-select" class="block text-sm font-medium text-gray-300 mb-2">Select Guild</label>
+		<select
+			id="guild-select"
+			bind:value={selectedGuild}
+			class="bg-[#40444b] text-white rounded px-3 py-2 w-full"
+		>
+			<option value={null}>Select a guild</option>
+			{#each $userAdminGuilds as guild}
+				<option value={guild.id}>{guild.name}</option>
+			{/each}
+		</select>
+	</div>
 	<!-- Embeds Section -->
 	<div class="mb-8">
 		<button class="w-full text-left font-bold py-2 px-4 rounded bg-[#40444b]" on:click={() => toggleSection(embedsOpen)}>
@@ -223,13 +258,22 @@
 							{component.IsSelect ? 'Select Menu' : 'Button'} {index + 1} {$componentsCollapsed[index] ? '►' : '▼'}
 						</button>
 						{#if !$componentsCollapsed[index]}
-							<input
-								class="shadow appearance-none border rounded w-full py-2 px-3 text-[#dcddde] bg-[#40444b] leading-tight focus:outline-none focus:shadow-outline mb-2"
-								type="text"
-								placeholder="Id"
-								bind:value={component.Id}
-								on:input={(e) => updateComponent(index, 'Id', e.target.value)}
-							>
+							<div class="mb-2">
+								<label class="block text-[#dcddde] text-sm font-bold mb-2" for={`component-id-${index}`}>
+									ID (Chat Trigger)
+								</label>
+								<select
+									id={`component-id-${index}`}
+									class="shadow appearance-none border rounded w-full py-2 px-3 text-[#dcddde] bg-[#40444b] leading-tight focus:outline-none focus:shadow-outline"
+									bind:value={component.Id}
+									on:change={(e) => updateComponent(index, 'Id', e.target.value)}
+								>
+									<option value="">Select a chat trigger</option>
+									{#each guildTriggers as trigger}
+										<option value={trigger.id}>{trigger.id}: {trigger.trigger}</option>
+									{/each}
+								</select>
+							</div>
 							<input
 								class="shadow appearance-none border rounded w-full py-2 px-3 text-[#dcddde] bg-[#40444b] leading-tight focus:outline-none focus:shadow-outline mb-2"
 								type="text"
@@ -276,13 +320,22 @@
 									{#if component.Options && component.Options.length > 0}
 										{#each component.Options as option, optionIndex}
 											<div class="mb-2 p-2 border border-[#40444b] rounded">
-												<input
-													class="shadow appearance-none border rounded w-full py-2 px-3 text-[#dcddde] bg-[#40444b] leading-tight focus:outline-none focus:shadow-outline mb-2"
-													type="text"
-													placeholder="Option Id"
-													bind:value={option.Id}
-													on:input={(e) => updateComponentOption(index, optionIndex, 'Id', e.target.value)}
-												>
+												<div class="mb-2">
+													<label class="block text-[#dcddde] text-sm font-bold mb-2" for={`option-id-${index}-${optionIndex}`}>
+														Option ID (Chat Trigger)
+													</label>
+													<select
+														id={`option-id-${index}-${optionIndex}`}
+														class="shadow appearance-none border rounded w-full py-2 px-3 text-[#dcddde] bg-[#40444b] leading-tight focus:outline-none focus:shadow-outline"
+														bind:value={option.Id}
+														on:change={(e) => updateComponentOption(index, optionIndex, 'Id', e.target.value)}
+													>
+														<option value="">Select a chat trigger</option>
+														{#each guildTriggers as trigger}
+															<option value={trigger.id}>{trigger.id}: {trigger.trigger}</option>
+														{/each}
+													</select>
+												</div>
 												<input
 													class="shadow appearance-none border rounded w-full py-2 px-3 text-[#dcddde] bg-[#40444b] leading-tight focus:outline-none focus:shadow-outline mb-2"
 													type="text"

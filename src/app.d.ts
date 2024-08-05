@@ -1,11 +1,13 @@
-// See https://kit.svelte.dev/docs/types#app
-// for information about these interfaces
+import type {DiscordUser} from "./lib/types/discord";
+
 declare global {
-	namespace App {
+	namespace App	 {
 		// interface Error {}
-		// interface Locals {}
+		interface Locals {
+			user: DiscordUser | null
+		}
+
 		// interface PageData {}
-		// interface PageState {}
 		// interface Platform {}
 	}
 }
